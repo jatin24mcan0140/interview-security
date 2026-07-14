@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Verify your face{% endblock %}
+{% block content %}
+
+<div class="text-center">
+    <h4>{{ meeting.title or "Interview" }}</h4>
+    <p class="text-muted">Look at the camera to verify your identity.</p>
+
+    <video id="video" width="360" height="270" autoplay playsinline class="border rounded bg-dark"></video>
+    <canvas id="canvas" width="360" height="270" style="display:none"></canvas>
+
+    <div class="my-3">
+        <button id="verifyBtn" class="btn btn-primary">Verify face</button>
+    </div>
+
+    <div id="status" class="mt-2"></div>
+
+    <div id="reviewBox" style="display:none" class="mt-3">
+        <p class="text-danger">Verification failed after {{ 2 }} attempts.</p>
+        <input type="text" id="claimedName" class="form-control mb-2" placeholder="Enter your full name">
+        <button id="requestReviewBtn" class="btn btn-warning">Request manual review from admin</button>
+        <div id="pollStatus" class="mt-2 text-muted"></div>
+    </div>
+</div>
+
+<script>
+const meetingCode = "{{ meeting.meeting_code }}";
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const statusDiv = document.getElementById('status');
+const verifyBtn = document.getElementById('verifyBtn');
+const reviewBox = document.getElementById('reviewBox');
+
+let attempts = 0;
+const MAX_ATTEMPTS = 2;
+let lastSnapshotTmp = null;
+
+navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => { video.srcObject = stream; })
+    .catch(() => { statusDiv.innerHTML = '<span class="text-danger">Camera access denied. Please allow camera access.</span>'; });
+
+function captureFrame() {
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.8);
+}
+
+verifyBtn.addEventListener('click', async () => {
+    verifyBtn.disabled = true;
+    statusDiv.innerHTML = 'Checking...';
+    const image = captureFrame();
+
+    const res = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, meeting_code: meetingCode })
+    });
+    const data = await res.json();
+
+    if (data.status === 'matched') {
+        statusDiv.innerHTML = `<span class="text-success">Welcome, ${data.name}! Redirecting to meeting...</span>`;
+        setTimeout(() => {
+            window.location.href = `/meeting/${meetingCode}?role=${data.role}&name=${encodeURIComponent(data.name)}`;
+        }, 1200);
+    } else {
+        attempts++;
+        lastSnapshotTmp = data.snapshot_tmp || null;
+        if (attempts < MAX_ATTEMPTS) {
+            statusDiv.innerHTML = `<span class="text-warning">No match found. Attempt ${attempts}/${MAX_ATTEMPTS}. Try again.</span>`;
+            verifyBtn.disabled = false;
+        } else {
+            statusDiv.innerHTML = `<span class="text-danger">Verification failed.</span>`;
+            reviewBox.style.display = 'block';
+        }
+    }
+});
+
+const pollStatus = document.getElementById('pollStatus');
+let denialCount = 0; // how many times admin has denied this meeting's review requests
+
+async function submitReviewRequest(claimedName) {
+    pollStatus.innerHTML = 'Sending request to admin...';
+
+    const res = await fetch('/api/request-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meeting_code: meetingCode, claimed_name: claimedName, snapshot_tmp: lastSnapshotTmp })
+    });
+    const data = await res.json();
+
+    if (data.status === 'limit_reached') {
+        showTerminalMessage();
+        return;
+    }
+    if (data.status === 'already_pending') {
+        pollStatus.innerHTML = '<span class="text-warning">A review is already pending — waiting for admin...</span>';
+    } else {
+        pollStatus.innerHTML = 'Waiting for admin approval...';
+    }
+
+    const poll = setInterval(async () => {
+        const check = await fetch(`/api/check-approval/${data.request_id}`);
+        const result = await check.json();
+        if (result.status === 'approved') {
+            clearInterval(poll);
+            pollStatus.innerHTML = '<span class="text-success">Approved! Joining meeting...</span>';
+            setTimeout(() => {
+                window.location.href = `/meeting/${meetingCode}?role=candidate&name=${encodeURIComponent(claimedName)}`;
+            }, 1000);
+        } else if (result.status === 'denied') {
+            clearInterval(poll);
+            denialCount++;
+            if (denialCount < 2) {
+                showRetryOption(claimedName);
+            } else {
+                showTerminalMessage();
+            }
+        }
+    }, 3000);
+}
+
+function showRetryOption(claimedName) {
+    pollStatus.innerHTML = `
+        <span class="text-danger">Access denied by admin.</span><br>
+        <button id="retryReviewBtn" class="btn btn-warning btn-sm mt-2">Request one more review</button>
+    `;
+    document.getElementById('retryReviewBtn').addEventListener('click', () => {
+        submitReviewRequest(claimedName);
+    }, { once: true });
+}
+
+function showTerminalMessage() {
+    pollStatus.innerHTML =
+        '<span class="text-danger">Verification unsuccessful. Please contact your interviewer/HR to reschedule.</span>';
+}
+
+document.getElementById('requestReviewBtn').addEventListener('click', () => {
+    const claimedName = document.getElementById('claimedName').value || 'Unknown';
+    document.getElementById('requestReviewBtn').disabled = true;
+    submitReviewRequest(claimedName);
+});
+</script>
+{% endblock %}

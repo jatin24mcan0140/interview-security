@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+{% block content %}
+<h3>Activity logs</h3>
+<a href="/admin" class="btn btn-sm btn-outline-dark mb-3">&larr; Back to admin panel</a>
+<table class="table table-striped table-sm">
+    <thead>
+        <tr><th>Time</th><th>Meeting</th><th>User</th><th>Event</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+    {% for l in logs %}
+        <tr>
+            <td>{{ l.timestamp }}</td>
+            <td>{{ l.meeting_code }}</td>
+            <td>{{ l.user_name or '—' }}</td>
+            <td>
+                {% if l.event_type == 'verified' %}<span class="badge bg-success">verified</span>
+                {% elif l.event_type == 'denied' %}<span class="badge bg-danger">denied</span>
+                {% elif l.event_type == 'auto_ended' %}<span class="badge bg-warning text-dark">auto ended</span>
+                {% elif l.event_type == 'manual_override_approved' %}<span class="badge bg-info text-dark">override approved</span>
+                {% elif l.event_type == 'unknown_face_alert' %}<span class="badge bg-danger">unknown face</span>
+                {% else %}<span class="badge bg-secondary">{{ l.event_type }}</span>{% endif %}
+            </td>
+            <td class="text-muted small">{{ l.details }}</td>
+        </tr>
+    {% else %}
+        <tr><td colspan="5" class="text-muted">No activity yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

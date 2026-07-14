@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+    <h2>AI-based interview security system</h2>
+    <p class="text-muted">Open the meeting link sent to you by the admin to begin face verification.</p>
+    {% if error %}
+        <div class="alert alert-danger d-inline-block">{{ error }}</div>
+    {% endif %}
+    <p><a href="/admin" class="btn btn-primary">Go to admin panel</a></p>
+</div>
+{% endblock %}

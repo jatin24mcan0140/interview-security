@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel{% endblock %}
+{% block content %}
+
+<h3>Admin panel</h3>
+<p class="text-muted">Add people, manage photos, create meeting links, and approve manual reviews.</p>
+
+{% if pending %}
+<div class="alert alert-warning">
+    <strong>{{ pending|length }} pending manual review request(s)</strong>
+    <table class="table table-sm mt-2 mb-0">
+        <thead><tr><th>Meeting</th><th>Claimed name</th><th>Snapshot</th><th>Action</th></tr></thead>
+        <tbody>
+        {% for p in pending %}
+            <tr>
+                <td>{{ p.meeting_code }}</td>
+                <td>{{ p.claimed_name }}</td>
+                <td>
+                    {% if p.snapshot_path %}
+                        <img src="/uploads/{{ p.snapshot_path.split('/')[-1] }}" width="60" class="rounded">
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    <form method="post" action="/admin/approve/{{ p.id }}" style="display:inline">
+                        <button class="btn btn-success btn-sm">Approve &amp; force join</button>
+                    </form>
+                    <form method="post" action="/admin/deny/{{ p.id }}" style="display:inline">
+                        <button class="btn btn-danger btn-sm">Deny</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">Add new person</div>
+            <div class="card-body">
+                <form method="post" action="/admin/add-user" enctype="multipart/form-data">
+                    <div class="mb-2">
+                        <label class="form-label">Full name</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Role</label>
+                        <select name="role" class="form-select" required>
+                            <option value="candidate">Candidate (interviewee)</option>
+                            <option value="interviewer">Interviewer</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Email (optional)</label>
+                        <input type="email" name="email" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Reference photo(s)</label>
+                        <input type="file" name="photos" class="form-control" accept="image/*" multiple required>
+                        <div class="form-text">You can select multiple photos (different angles/lighting) — this improves match accuracy.</div>
+                    </div>
+                    <button class="btn btn-primary">Add person</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">Create meeting link</div>
+            <div class="card-body">
+                <form method="post" action="/admin/create-meeting">
+                    <div class="mb-2">
+                        <label class="form-label">Title</label>
+                        <input type="text" name="title" class="form-control" placeholder="e.g. Backend Developer Interview">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Interviewer</label>
+                        <select name="interviewer_id" class="form-select" required>
+                            {% for u in users if u.role == 'interviewer' %}
+                            <option value="{{ u.id }}">{{ u.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Candidate</label>
+                        <select name="candidate_id" class="form-select" required>
+                            {% for u in users if u.role == 'candidate' %}
+                            <option value="{{ u.id }}">{{ u.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button class="btn btn-primary">Generate link</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">People &amp; photos</div>
+            <div class="card-body" style="max-height: 500px; overflow-y:auto;">
+                {% for u in users %}
+                <div class="border rounded p-2 mb-2">
+                    <strong>{{ u.name }}</strong>
+                    <span class="badge bg-secondary">{{ u.role }}</span>
+                    <span class="text-muted small">({{ u.photos|length }} photo{{ 's' if u.photos|length != 1 else '' }})</span>
+                    <form method="post" action="/admin/delete-user/{{ u.id }}" style="display:inline float:end">
+                        <button class="btn btn-outline-danger btn-sm">Remove</button>
+                    </form>
+                    <div class="mt-2 d-flex flex-wrap gap-1">
+                        {% for p in u.photos %}
+                        <div class="position-relative">
+                            <img src="/uploads/{{ p.photo_path.split('/')[-1] }}" width="50" height="50" style="object-fit:cover" class="rounded border">
+                            <form method="post" action="/admin/delete-photo/{{ p.id }}" style="position:absolute;top:-6px;right:-6px">
+                                <button class="btn btn-danger btn-sm p-0 px-1" style="font-size:10px">x</button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <form method="post" action="/admin/add-photo/{{ u.id }}" enctype="multipart/form-data" class="mt-2 d-flex gap-1">
+                        <input type="file" name="photos" accept="image/*" multiple class="form-control form-control-sm">
+                        <button class="btn btn-outline-secondary btn-sm">+ Add photo</button>
+                    </form>
+                </div>
+                {% else %}
+                <p class="text-muted">No one added yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">Meeting links</div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead><tr><th>Title</th><th>Interviewer</th><th>Candidate</th><th>Link</th><th></th></tr></thead>
+                    <tbody>
+                    {% for m in meetings %}
+                        <tr>
+                            <td>{{ m.title }}</td>
+                            <td>{{ m.interviewer_name }}</td>
+                            <td>{{ m.candidate_name }}</td>
+                            <td><code>/join/{{ m.meeting_code }}</code></td>
+                            <td>
+                                <form method="post" action="/admin/delete-meeting/{{ m.meeting_code }}"
+                                      style="display:inline"
+                                      onsubmit="return confirm('Delete this meeting link? This also removes any pending review requests for it.');">
+                                    <button class="btn btn-outline-danger btn-sm">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <a href="/admin/logs" class="btn btn-outline-dark btn-sm">View full logs</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Pending review requests can arrive at any time from a candidate's browser.
+// Poll the count every 5s and reload only if it actually changed, so the
+// admin doesn't have to keep hitting refresh to see a new request come in.
+const initialPendingCount = {{ pending|length }};
+setInterval(async () => {
+    try {
+        const res = await fetch('/api/admin/pending-count');
+        const data = await res.json();
+        if (data.count !== initialPendingCount) {
+            window.location.reload();
+        }
+    } catch (e) {
+        // network hiccup — just skip this tick, next poll will retry
+    }
+}, 5000);
+</script>
+{% endblock %}

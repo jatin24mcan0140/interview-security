@@ -1,0 +1,9 @@
+body {
+    background: #f7f7f9;
+}
+.card-header {
+    font-weight: 600;
+}
+#video {
+    object-fit: cover;
+}
