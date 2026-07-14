@@ -3,10 +3,10 @@ deepface==0.0.93
 tensorflow==2.16.1
 numpy==1.26.4
 opencv-python-headless
-gunicorn
+gunicorn==22.0.0
 Flask-Login==0.6.3
 Flask-Limiter==3.7.0
 SQLAlchemy==2.0.30
 psycopg2-binary==2.9.9
-Pillow
+Pillow==10.3.0
 python-dotenv==1.0.1
